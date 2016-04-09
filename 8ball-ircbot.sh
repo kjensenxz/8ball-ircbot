@@ -53,12 +53,12 @@ for channel in ${channels[@]}; do
 done
 
 tail -f -n 0 $outfile | \
-	while read -r chan char date time nick cmd msg; do
+	while read -r chan char date time nick cmd; do
 		case $cmd in
 			!bots|.bots)
 				echo ":m $chan 8ball-bot [bash]" >> $infile
 			;;
-			${nickname}*)
+			*${nickname}*)
 				shuf $t8ball |\
 					sed 's|^|:m '$chan' '$nick' |' |\
 					head -n1 >> $infile
