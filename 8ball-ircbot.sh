@@ -18,7 +18,7 @@
 # 	./8ball-ircbot.sh & disown
 
 # when terminate, clean up
-trap 'rm $infile $outfile; pkill -P $$; exit' SIGINT SIGHUP SIGTERM
+trap 'pkill -P $$; rm $infile $outfile; exit' SIGINT SIGHUP SIGTERM
 
 if [ ! -f "./config.sh" ]; then
 	echo "config file not found"
@@ -60,8 +60,8 @@ tail -f -n 0 $outfile | \
 			;;
 			*${nickname}*)
 				shuf $t8ball |\
-					sed 's|^|:m '$chan' '$nick' |' |\
-					head -n1 >> $infile
+					head -n1 |\
+					sed 's|^|:m '$chan' '$nick' |' >> $infile
 			;;
 		esac
 	done
