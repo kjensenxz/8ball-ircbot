@@ -20,7 +20,7 @@
 # when terminate, clean up
 trap 'rm $infile $outfile; pkill -P $$; exit' SIGINT SIGHUP SIGTERM
 
-if ![ -f "./config.sh" ]; then
+if [ ! -f "./config.sh" ]; then
 	echo "config file not found"
 	exit
 fi
