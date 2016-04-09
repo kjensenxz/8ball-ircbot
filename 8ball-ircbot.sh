@@ -16,25 +16,17 @@
 # 8ball bot using sic and a shell script
 # RUNNING:
 # 	./8ball-ircbot.sh & disown
-# suspends job to background then
-# gives it to init
-# KILLING:
-# kill -TERM $PID
-
-# SETTINGS
-server="irc.rizon.net"
-nickname="the8ball"
-# space sep list of chans
-channels=('#chan1' '#chan2')
-# 8ball responses
-t8ball="8ball-resp.txt"
-infile="/tmp/in-8ballbot"
-outfile="/tmp/out-8ballbot"
-touch $infile
-touch $outfile
 
 # when terminate, clean up
 trap 'rm $infile $outfile; pkill -P $$; exit' SIGINT SIGHUP SIGTERM
+
+if ![ -f "./config.sh" ]; then
+	echo "config file not found"
+	exit
+fi
+. config.sh
+touch $infile
+touch $outfile
 
 # need sic
 if [ "$(which sic)" == "" ]; then
