@@ -31,7 +31,7 @@ touch $outfile
 # need sic
 if [ "$(which sic)" == "" ]; then
 	echo "sic (simple irc client) required"
-    exit
+	exit
 fi
 
 # need shuf 
