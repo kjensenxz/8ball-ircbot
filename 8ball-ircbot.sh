@@ -64,7 +64,7 @@ tail -f -n 0 $outfile | \
 	while read -r chan char date time nick cmd msg; do
 		case $cmd in
 			!bots|.bots)
-				echo "8ball-bot [bash]" >> $infile
+				echo ":m $chan 8ball-bot [bash]" >> $infile
 			;;
 			${nickname}*)
 				shuf $t8ball |\
