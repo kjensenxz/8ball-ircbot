@@ -25,8 +25,8 @@ if [ ! -f "./config.sh" ]; then
 	exit
 fi
 . config.sh
-touch $infile
-touch $outfile
+mkfifo $infile
+mkfifo $outfile
 
 # need sic
 if [ "$(which sic)" == "" ]; then
@@ -42,26 +42,36 @@ if [ "$(which shuf)" == "" ]; then
 fi
 
 # connect to server
+# tail -f can be slow
+# may be a boon to prevent flooding
 tail -f $infile | sic -h "$server" -n "$nickname" >> $outfile &
 
 # wait for connect
 sleep 10s
 for channel in ${channels[@]}; do
-	echo ":j $channel" >> $infile
+	echo ":j $channel" > $infile
 	# joining next chan too fast doesn't work
 	sleep 2s
 done
 
-tail -f -n 0 $outfile | \
-	while read -r chan char date time nick cmd; do
-		case $cmd in
-			!bots|.bots)
-				echo ":m $chan 8ball-bot [bash]" >> $infile
-			;;
-			*${nickname}*)
-				shuf $t8ball |\
-					head -n1 |\
-					sed 's|^|:m '$chan' '$nick' |' >> $infile
-			;;
-		esac
-	done
+# have to clear pipe to prevent flood
+exec 5<>$outfile
+cat <&5 >/dev/null & KILL_ME=$!
+sleep 10 # wait for server to shut up
+kill $KILL_ME
+
+while read -r chan char date time nick cmd; do
+	case $cmd in
+		*'No such nick/channel'*)
+			true # needed to prevent infinite to serv
+		;;
+		!bots|.bots)
+			echo ":m $chan 8ball-bot [bash]" > $infile
+		;;
+		*${nickname}*)
+			shuf $t8ball |\
+				head -n1 |\
+				sed 's|^|:m '$chan' '$nick' |' > $infile
+		;;
+	esac
+done <$outfile
