@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Copyright 2016 prussian <generalunrest@airmail.cc>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +17,6 @@
 # RUNNING:
 # 	./8ball-ircbot.sh & disown
 
-# when terminate, clean up
-trap 'pkill -P $$; rm $infile $outfile; exit' SIGINT SIGHUP SIGTERM
-
 if [ ! -f "./config.sh" ]; then
 	echo "config file not found"
 	exit
@@ -27,6 +24,34 @@ fi
 . config.sh
 mkfifo $infile
 mkfifo $outfile
+
+function quit_prg {
+	pkill -P $$
+	rm $infile $outfile
+	exit
+}
+
+# for msg processing
+# decide either this or that
+regexp="${nickname}. (.*) or (.*)\?"
+# standard 8ball output
+regexp2="${nickname}. (.*)\?"
+# $1 is chan
+# $2 is the user's nick
+# $3 is the msg
+function process_msg {
+	if [[ "$3" =~ $regexp ]]; then
+		resp=${BASH_REMATCH[($RANDOM % 2)+1]}
+		echo ":m $1 $2: $resp" > $infile
+	elif [[ "$3" =~ $regexp2 ]]; then
+		shuf $t8ball |\
+			head -n1 |\
+			sed 's|^|:m '$1' '$2' |' > $infile
+	fi
+}
+
+# when terminate, clean up
+trap 'quit_prg' SIGINT SIGHUP SIGTERM
 
 # need sic
 if [ "$(which sic)" == "" ]; then
@@ -62,16 +87,17 @@ kill $KILL_ME
 
 while read -r chan char date time nick cmd; do
 	case $cmd in
-		*'No such nick/channel'*)
-			true # needed to prevent infinite to serv
-		;;
 		!bots|.bots)
 			echo ":m $chan 8ball-bot [bash]" > $infile
 		;;
+		!source|.source)
+			echo ":m $chan https://github.com/GeneralUnRest/8ball-ircbot" > $infile
+		;;
+		!help|.help)
+			echo ":m $chan Highlight me and ask a yes or no question or give me two prepositions separated by an or; all queries must end with a question mark." > $infile
+		;;
 		*${nickname}*)
-			shuf $t8ball |\
-				head -n1 |\
-				sed 's|^|:m '$chan' '$nick' |' > $infile
+			process_msg "$chan" "$nick" "$cmd"
 		;;
 	esac
 done <$outfile
