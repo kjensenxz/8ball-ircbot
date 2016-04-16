@@ -42,7 +42,7 @@ regexp2="${nickname}.? (.*)\?"
 function process_msg {
 	if [[ "$3" =~ $regexp ]]; then
 		resp=${BASH_REMATCH[($RANDOM % 2)+1]}
-		echo ":m $1 $2: $resp" > $infile
+		echo ":m $1 $2 $resp" > $infile
 	elif [[ "$3" =~ $regexp2 ]]; then
 		shuf $t8ball |\
 			head -n1 |\
