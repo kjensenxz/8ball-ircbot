@@ -33,9 +33,9 @@ function quit_prg {
 
 # for msg processing
 # decide either this or that
-regexp="${nickname}. (.*) or (.*)\?"
+regexp="${nickname}.? (.*) or (.*)\?"
 # standard 8ball output
-regexp2="${nickname}. (.*)\?"
+regexp2="${nickname}.? (.*)\?"
 # $1 is chan
 # $2 is the user's nick
 # $3 is the msg
