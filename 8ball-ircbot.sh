@@ -79,12 +79,6 @@ for channel in ${channels[@]}; do
 	sleep 2s
 done
 
-# have to clear pipe to prevent flood
-exec 5<>$outfile
-cat <&5 >/dev/null & KILL_ME=$!
-sleep 10 # wait for server to shut up
-kill $KILL_ME
-
 while read -r chan char date time nick cmd; do
 	case $cmd in
 		!bots|.bots)
