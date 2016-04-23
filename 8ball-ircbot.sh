@@ -17,13 +17,15 @@
 # RUNNING:
 # 	./8ball-ircbot.sh & disown
 
-[[ ! -f "./config.sh" ]] && (echo "config file not found"; quit_prg)
-
+if [ ! -f "./config.sh" ]; then
+	echo "config file not found"
+	exit
+fi
 . config.sh
 mkfifo $infile
 mkfifo $outfile
 
-function quit_prg{ 
+function quit_prg {
 	pkill -P $$
 	rm $infile $outfile
 	exit
@@ -52,11 +54,17 @@ function process_msg {
 trap 'quit_prg' SIGINT SIGHUP SIGTERM
 
 # need sic
-[[ -z $(which sic) ]] &>/dev/null && (echo "sic (simple irc client) required"; quit_prg)
+if [ "$(which sic)" == "" ]; then
+	echo "sic (simple irc client) required"
+	exit
+fi
 
 # need shuf 
 # NOT ON OS X last I used it
-[[ -z $(which shuf) ]] &>/dev/nul && (echo "your coreutils are limited"; quit_prg)
+if [ "$(which shuf)" == "" ]; then
+	echo "your coreutils are limited -_-"
+	exit
+fi
 
 # connect to server
 # tail -f can be slow
