@@ -82,7 +82,7 @@ done
 while read -r chan char date time nick cmd; do
 	case $cmd in
 		!bots|.bots)
-			echo ":m $chan 8ball-bot [bash]" > $infile
+			echo ":m $chan 8ball-bot [bash], .help for usage, .source for source code" > $infile
 		;;
 		!source|.source)
 			echo ":m $chan https://github.com/GeneralUnRest/8ball-ircbot" > $infile
