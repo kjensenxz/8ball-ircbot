@@ -40,6 +40,11 @@ regexp2="${nickname}.? (.*)\?"
 # $2 is the user's nick
 # $3 is the msg
 function process_msg {
+
+	if [[ "$2" == "<$nickname>" ]]; then
+		return
+	fi
+
 	if [[ "$3" =~ $regexp ]]; then
 		resp=${BASH_REMATCH[($RANDOM % 2)+1]}
 		echo ":m $1 $2 $resp" > $infile

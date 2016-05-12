@@ -1,8 +1,8 @@
 # SETTINGS
 server="irc.rizon.net"
-nickname="the8ball"
+nickname="the8ball1"
 # space sep list of chans
-channels=('#chan1' '#chan2')
+channels=('#/cum/')
 # 8ball responses
 t8ball="8ball-resp.txt"
 infile="/tmp/in-8ballbot"
