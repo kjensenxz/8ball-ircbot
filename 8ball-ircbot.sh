@@ -31,6 +31,68 @@ function quit_prg {
 	exit
 }
 
+# join a channel
+# $1 channel to join
+function join_chan {
+	echo ":j $1" > $infile
+}
+
+# send a message
+# $1 channel to send to
+# $2 message to send
+function send_msg {
+	echo ":m $1 $2" > $infile
+}
+
+# "return" an 8ball response
+# to capture return, wrap call with 
+# `get_ans_8ball` or $(get_ans_8ball)
+function get_ans_8ball {
+	shuf $t8ball | head -n1
+}
+
+# for invites
+# technically there can be other
+# symbols at start of chan name other
+# than # so I'm just going to allow anything
+# if it fails to join, then it fails to join
+invite_regexp="invite (.*)"
+# $1 is user
+# $2 is message
+function process_privmsg {
+	# not sure if possible, but who knows
+	if [ "$1" == "$nickname" ]; then
+		return
+	fi
+
+	case "$2" in
+		invite*)
+			if [[ "$2" =~ $invite_regexp ]]; then
+				resp=${BASH_REMATCH[1]}
+				join_chan "$resp"
+				send_msg "$1" "Attempting to join $resp..."
+			else
+				send_msg "$1" "Give me a channel to join"
+			fi
+		;;
+		8ball*)
+			send_msg "$1" "$(get_ans_8ball)"
+		;;
+		source*)
+			send_msg "$1" "https://github.com/GeneralUnRest/8ball-ircbot"
+		;;
+		*)
+			send_msg "$1" "These are the command/s supported:"
+			send_msg "$1" "invite [#channel] - join channel"
+			send_msg "$1" "8ball [y/n question] - standard 8ball response"
+			send_msg "$1" "source - get source code"
+			send_msg "$1" "help - this message"
+		;;
+	esac
+
+	return
+}
+
 # for msg processing
 # decide either this or that
 regexp="${nickname}.? (.*) or (.*)\?"
@@ -40,18 +102,18 @@ regexp2="${nickname}.? (.*)\?"
 # $2 is the user's nick
 # $3 is the msg
 function process_msg {
-
+	# sic doesn't allow me to send using PRIVMSG
+	# so this logic prevents the bot
+	# from talking to itself
 	if [[ "$2" == "<$nickname>" ]]; then
 		return
 	fi
 
 	if [[ "$3" =~ $regexp ]]; then
 		resp=${BASH_REMATCH[($RANDOM % 2)+1]}
-		echo ":m $1 $2 $resp" > $infile
+		send_msg "$1" "$2 $resp"
 	elif [[ "$3" =~ $regexp2 ]]; then
-		shuf $t8ball |\
-			head -n1 |\
-			sed 's|^|:m '$1' '$2' |' > $infile
+		send_msg "$1" "$2 $(get_ans_8ball)"
 	fi
 }
 
@@ -67,7 +129,7 @@ fi
 # need shuf 
 # NOT ON OS X last I used it
 if [ -z "$(which shuf)" ]; then
-	echo "your coreutils are limited -_-"
+	echo "your coreutils must include shuf"
 	quit_prg
 fi
 
@@ -79,7 +141,7 @@ tail -f $infile | sic -h "$server" -n "$nickname" -p "$port" >> $outfile &
 # wait for connect
 sleep 10s
 for channel in ${channels[@]}; do
-	echo ":j $channel" > $infile
+	join_chan "$channel"
 	# joining next chan too fast doesn't work
 	sleep 2s
 done
@@ -87,18 +149,23 @@ done
 while read -r chan char date time nick cmd; do
 	case $cmd in
 		!bots|.bots)
-			echo ":m $chan 8ball-bot [bash], .help for usage, .source for source code" > $infile
+			send_msg "$chan" "8ball-bot [bash], .help for usage, .source for source code"
 		;;
 		!source|.source)
-			echo ":m $chan https://github.com/GeneralUnRest/8ball-ircbot" > $infile
+			send_msg "$chan" "https://github.com/GeneralUnRest/8ball-ircbot"
 		;;
 		!help|.help)
-			echo ":m $chan Highlight me and ask a yes or no question or give me two prepositions separated by an or; all queries must end with a question mark." > $infile
+			send_msg "$chan" "Highlight me and ask a yes or no question or give me two prepositions separated by an or; all queries must end with a question mark."
 		;;
 		*${nickname}*)
 			process_msg "$chan" "$nick" "$cmd"
 		;;
+		*) if [ "$chan" == "$nickname" ]; then
+			user=$(sed 's/[<>]//g' <<< "$nick")
+			process_privmsg "$user" "$cmd"
+		fi ;;
 	esac
+
 	if [ -n "$logfile" ]; then
 		echo "$chan $char $date $time $nick $cmd" >> $logfile
 	fi
