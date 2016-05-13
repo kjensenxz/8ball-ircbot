@@ -59,22 +59,22 @@ function process_msg {
 trap 'quit_prg' SIGINT SIGHUP SIGTERM
 
 # need sic
-if [ "$(which sic)" == "" ]; then
+if [ -z "$(which sic)" ]; then
 	echo "sic (simple irc client) required"
-	exit
+	quit_prg
 fi
 
 # need shuf 
 # NOT ON OS X last I used it
-if [ "$(which shuf)" == "" ]; then
+if [ -z "$(which shuf)" ]; then
 	echo "your coreutils are limited -_-"
-	exit
+	quit_prg
 fi
 
 # connect to server
 # tail -f can be slow
 # may be a boon to prevent flooding
-tail -f $infile | sic -h "$server" -n "$nickname" >> $outfile &
+tail -f $infile | sic -h "$server" -n "$nickname" -p "$port" >> $outfile &
 
 # wait for connect
 sleep 10s
@@ -99,4 +99,7 @@ while read -r chan char date time nick cmd; do
 			process_msg "$chan" "$nick" "$cmd"
 		;;
 	esac
-done <$outfile
+	if [ -n "$logfile" ]; then
+		echo "$chan $char $date $time $nick $cmd" >> $logfile
+	fi
+done < $outfile
