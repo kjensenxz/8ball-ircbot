@@ -1,25 +1,36 @@
-8ball irc bot
+8ball IRC Bot
+-------------
 
-8ball bot using sic and a shell script
+8ball bot using sic (suckless simple irc client) and bash.
+
 # RUNNING:
 	
 	./8ball-ircbot.sh & disown
 
 # SETTINGS:
 
-Edit the script
+Edit the script config.sh
 
-	# SETTINGS
-	
-	# IRC
-	server="irc.rizon.net"
-	nickname="the8ball"
-	# space sep list of chans
-	channels=('#chan1' '#chan2')
+# USING:
 
-	# 8ball responses file
-	t8ball="8ball-resp.txt"
+Ask it a yes or no question, note the ? at the end is required:
 
-	# input/output files
-	infile="/tmp/in-8ballbot"
-	outfile="/tmp/out-8ballbot"
+	<you>      the8ball: should I do x?
+	<the8ball> <you> Without a doubt.
+
+Ask it to decided between two things:
+
+	<you>      the8ball: this or that?
+	<the8ball> <you> that.
+
+Other commands:
+
+	.bots or !bots - report in, other info
+	.source or !source - get link to the github repo
+	.help or !help - get a sentence describing how to use the bot
+
+# INVITING TO YOUR CHANNEL:
+
+Just message the bot:
+
+	/msg the8ball invite <YOUR CHANNEL HERE>
