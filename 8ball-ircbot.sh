@@ -28,20 +28,21 @@ mkfifo $outfile
 function quit_prg {
 	pkill -P $$
 	rm $infile $outfile
+	exec 4>&-
 	exit
 }
 
 # join a channel
 # $1 channel to join
 function join_chan {
-	echo ":j $1" > $infile
+	echo ":j $1" >&4
 }
 
 # send a message
 # $1 channel to send to
 # $2 message to send
 function send_msg {
-	echo ":m $1 $2" > $infile
+	echo ":m $1 $2" >&4 
 }
 
 # "return" an 8ball response
@@ -134,9 +135,9 @@ if [ -z "$(which shuf)" ]; then
 fi
 
 # connect to server
-# tail -f can be slow
-# may be a boon to prevent flooding
-tail -f $infile | sic -h "$server" -n "$nickname" -p "$port" >> $outfile &
+sic -h "$server" -n "$nickname" -p "$port" < $infile > $outfile &
+# holds the pipe open
+exec 4> $infile
 
 # wait for connect
 sleep 10s
