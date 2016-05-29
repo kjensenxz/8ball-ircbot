@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2016 prussian <generalunrest@airmail.cc>
+# Copyright 2016 prussian <generalunrest@airmail.cc>, Kenneth B. Jensen <kenneth@jensen.cf>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,169 +18,121 @@
 # 	./8ball-ircbot.sh & disown
 
 if [ ! -f "./config.sh" ]; then
-	echo "config file not found"
+	echo "error: config file not found; exiting"
 	exit
 fi
-. config.sh
-mkfifo $infile
-mkfifo $outfile
 
-function quit_prg {
+. ./config.sh
+
+mkfifo "$infile" "$outfile"
+exec 3<> "$infile"
+exec 4<> "$outfile"
+
+function exit_prg {
 	pkill -P $$
-	rm $infile $outfile
+	rm "$infile" "$outfile"
+	exec 3>&-
 	exec 4>&-
 	exit
 }
 
-# join a channel
-# $1 channel to join
+function queue_msg {
+	echo "$*"
+	echo -e "$*\r\n" >&3
+}
+
 function join_chan {
-	echo ":j $1" >&4
+	queue_msg "JOIN $1"
 }
 
-# send a message
-# $1 channel to send to
-# $2 message to send
 function send_msg {
-	echo ":m $1 $2" >&4 
+	queue_msg "PRIVMSG $1 :$2"
 }
 
-# "return" an 8ball response
-# to capture return, wrap call with 
-# `get_ans_8ball` or $(get_ans_8ball)
-function get_ans_8ball {
-	shuf $t8ball | head -n1
+function get_8ball {
+	shuf "$ballmsgs" | head -n 1
 }
 
-# for invites
-# technically there can be other
-# symbols at start of chan name other
-# than # so I'm just going to allow anything
-# if it fails to join, then it fails to join
-invite_regexp="invite (.*)"
-# $1 is user
-# $2 is message
-function process_privmsg {
-	# not sure if possible, but who knows
-	if [ "$1" == "$nickname" ]; then
+function parse_msg {
+	echo "1: $1"
+	echo "2: $2"
+	user=''
+	dest=''
+	sourcemsg=''
+	if [[ $2 =~ "PRIVMSG" ]]; then
+		user=`echo ${1} | sed 's/[:!]/ /g' | awk '{print $1}'`
+		if [[ $2 =~ "#" ]]; then
+			dest=`echo ${2} | awk '{print $2}'`
+		else
+			dest=${user}
+		fi
+		sourcemsg=`echo ${2} | sed 's/[^:]*://'`
+		echo "$user $dest $sourcemsg"
+	elif [ "$1" == "PING" ]; then
+		reply=`echo $2 | sed 's/://g'`
+		echo "reply: $reply"
+		queue_msg "PONG $reply"
 		return
 	fi
-
-	case "$2" in
-		invite*)
-			if [[ "$2" =~ $invite_regexp ]]; then
-				resp=${BASH_REMATCH[1]}
-				join_chan "$resp"
-				send_msg "$1" "Attempting to join $resp..."
-			else
-				send_msg "$1" "Give me a channel to join"
-			fi
-		;;
-		8ball*)
-			send_msg "$1" "$(get_ans_8ball)"
-		;;
-		source*)
-			send_msg "$1" "https://github.com/GeneralUnRest/8ball-ircbot"
-		;;
-		*)
-			send_msg "$1" "These are the command/s supported:"
-			send_msg "$1" "invite [#channel] - join channel"
-			send_msg "$1" "8ball [y/n question] - standard 8ball response"
-			send_msg "$1" "source - get source code"
-			send_msg "$1" "help - this message"
-		;;
-	esac
-
-	return
-}
-
-# for msg processing
-# decide either this or that
-regexp="${nickname}.? (.*) or (.*)\?"
-# standard 8ball output
-regexp2="${nickname}.? (.*)\?"
-# $1 is chan
-# $2 is the user's nick
-# $3 is the msg
-function process_msg {
-	# sic doesn't allow me to send using PRIVMSG
-	# so this logic prevents the bot
-	# from talking to itself
-	if [[ "$2" == "<$nickname>" ]]; then
-		return
-	fi
-
-	if [[ "$3" =~ $regexp ]]; then
-		resp=${BASH_REMATCH[($RANDOM % 2)+1]}
-		send_msg "$1" "$2 $resp"
-	elif [[ "$3" =~ $regexp2 ]]; then
-		send_msg "$1" "$2 $(get_ans_8ball)"
+	# stolen regexes
+	# credit goes to @GeneralUnRest
+	regexp="${nickname}.? (.*) or (.*)\?"
+	regexp2="${nickname}.? (.*)\?"
+	regexp3="(.*) or (.*)\?"
+	regexp4="(.*)\?"
+	invite_regexp="invite (.*)"
+	[[ $user == ${nickname} ]] && return
+	private=$([[ (! -z $user ) &&  ($user == $dest) ]] && echo "yes")
+	if [[ ($sourcemsg =~ $regexp) || ($private && $sourcemsg =~ $regexp3) ]]; then
+		send_msg "$dest" "${BASH_REMATCH[($RANDOM % 2)+1]}"
+	elif [[ $sourcemsg =~ $regexp2 || ($private && $sourcemsg =~ $regexp4) ]]; then
+		send_msg "$dest" "$(get_8ball)"
+	elif [[ $sourcemsg =~ ".source" || ($private && $sourcemsg =~ "source") ]]; then
+		send_msg "$dest" "https://github.com/kjensenxz/irc8ball"
+	elif [[ $private && ($sourcemsg =~ $invite_regexp) ]]; then
+		send_msg "$dest" "Attempting to join ${BASH_REMATCH[1]}";
+		join_chan "${BASH_REMATCH[1]}"
+	elif [[ $private ]]; then
+		send_msg "$dest" "These are the command/s supported:"
+		send_msg "$dest" "invite #channel - join channel"
+		send_msg "$dest" "8ball [y/n question] - standard 8ball response"
+		send_msg "$dest" "x or y? - choose x or y"
+		send_msg "$dest" "source - get source info"
+		send_msg "$dest" "help - this message"
 	fi
 }
 
-# when terminate, clean up
-trap 'quit_prg' SIGINT SIGHUP SIGTERM
+trap 'exit_prg' SIGINT SIGHUP SIGTERM
 
-# need sic
-if [[ -z "$(which sic 2> /dev/null)" && !( -x "sic") ]]; then
-	echo "sic (simple irc client) required"
-	echo -n "download now? (y/n) "
-	read prompt
-	[[ ${prompt,,} != "y" ]] && quit_prg
-
-	[[ `which make 2> /dev/null` == "" ]] && \
-		echo "make is not installed; unable to make sic" && \
-		quit_prg
-
-	curl http://dl.suckless.org/tools/sic-1.2.tar.gz | tar xz
-	cd sic-1.2/
-	(make && mv sic ..) || (echo "unable to install sic" && cd ..; rm -r sic-1.2/ && quit_prg)
-	cd ..
-	rm -r sic-1.2/
+commands="${network} ${port}"
+if [[ $ssl == 'yes' ]]; then 
+	commands="--ssl ${commands}"
 fi
+ncat $commands <&3 >&4 &
+unset commands
 
-# need shuf 
-# NOT ON OS X last I used it
-if [ -z "$(which shuf)" ]; then
-	echo "your coreutils must include shuf"
-	quit_prg
-fi
-
-# decide which sic to use; connect to server
-sicbin=`which sic 2> /dev/null` || "./sic"
-$sicbin -h "$server" -n "$nickname" -p "$port" < $infile > $outfile &
-# holds the pipe open
-exec 4> $infile
-
-# wait for connect
-sleep 10s
-for channel in ${channels[@]}; do
-	join_chan "$channel"
-	# joining next chan too fast doesn't work
-	sleep 2s
-done
-
-while read -r chan char date time nick cmd; do
-	case $cmd in
-		!bots|.bots)
-			send_msg "$chan" "8ball-bot [bash], .help for usage, .source for source code"
-		;;
-		!source|.source)
-			send_msg "$chan" "https://github.com/GeneralUnRest/8ball-ircbot"
-		;;
-		!help|.help)
-			send_msg "$chan" "Highlight me and ask a yes or no question or give me two prepositions separated by an or; all queries must end with a question mark."
-		;;
-		*${nickname}*)
-			process_msg "$chan" "$nick" "$cmd"
-		;;
-		*) if [ "$chan" == "$nickname" ]; then
-			user=$(sed 's/[<>]//g' <<< "$nick")
-			process_privmsg "$user" "$cmd"
-		fi ;;
-	esac
-
-	if [ -n "$logfile" ]; then
-		echo "$chan $char $date $time $nick $cmd" >> $logfile
+(sleep 3s && echo "connect" >&4) &
+join="yes"
+while read -r usr msg; do
+	echo "$usr $msg"
+	if [[ "$usr" == "connect" || "$msg" =~ "^004" ]]; then
+		for i in $channels; do
+			queue_msg "JOIN ${i}"
+		done
+		break
+	elif [[ "$msg" =~ "NOTICE" && $join == "yes" ]]; then
+		queue_msg "NICK ${nickname}"
+		queue_msg "USER ${nickname} 8 * :${nickname}"
+		join='no'
+	elif [ "$usr" == "PING" ]; then
+		echo "PING RECIEVED"
+		reply=$(echo "$msg" | sed 's/://g')
+		queue_msg "PONG :$reply"
+		echo "connect" >&4
 	fi
-done < $outfile
+done <&4
+unset join
+
+while read -r usr msg; do
+	parse_msg "$usr" "$msg"
+done <&4
