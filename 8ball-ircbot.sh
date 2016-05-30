@@ -1,8 +1,7 @@
 #/usr/bin/env bash
 
-# BashBot - IRC bot framework written in bash
-# Copyright (C) 2016 Kenneth B. Jensen <kenneth@jensen.cf>
-
+# 8ball-ircbot - magic 8 ball irc bot
+# Copyright (C) 2016 Kenneth B. Jensen <kenneth@jensen.cf>, prussian <generalunrest@airmail.cc>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
