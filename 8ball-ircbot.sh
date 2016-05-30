@@ -1,138 +1,197 @@
-#!/usr/bin/env bash
-# Copyright 2016 prussian <generalunrest@airmail.cc>, Kenneth B. Jensen <kenneth@jensen.cf>
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+#/usr/bin/env bash
 
-# 8ball bot using sic and a shell script
-# RUNNING:
-# 	./8ball-ircbot.sh & disown
+# BashBot - IRC bot framework written in bash
+# Copyright (C) 2016 Kenneth B. Jensen <kenneth@jensen.cf>
 
-if [ ! -f "./config.sh" ]; then
-	echo "error: config file not found; exiting"
-	exit
-fi
 
-. ./config.sh
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-mkfifo "$infile" "$outfile"
-exec 3<> "$infile"
-exec 4<> "$outfile"
+trap 'exit_prg' SIGINT SIGHUP SIGTERM
+error() {
+	printf "ERROR: %s\n" "$1" >&2
+}
 
-function exit_prg {
-	pkill -P $$
-	rm "$infile" "$outfile"
+init_prg() {
+	# Load config; create pipes/fd
+	. ./config.sh
+	mkfifo "$infile" "$outfile"
+	exec 3<> "$infile"
+	exec 4<> "$outfile"
+
+	# Open connection
+	commands="${network} ${port}"
+	[ $ssl == 'yes' ] && commands="--ssl ${commands}"
+	ncat $commands <&3 >&4 &
+	unset commands
+}
+
+connect() {
+	# start a timer and connect to server
+	join='yes'
+	(sleep 2s && join='no' ) &
+	
+	queue "NICK ${nickname}"
+	queue "USER ${nickname} 8 * :${nickname}"
+	
+	while read -r prefix msg; do
+		echo "$prefix | $msg"
+		if [[ $prefix == "PING" ]]; then
+			queue "PONG ${msg}"
+			join='no'
+		elif [[ $msg =~ ^004 ]]; then
+			join='no'
+		elif [[ $msg =~ ^433 ]]; then
+			join='no'
+			error "nickname in use; exiting"
+			exit_prg
+		fi
+		if [[ $join == 'no' ]]; then 
+			break
+		fi
+	done <&4
+
+	# join channels, add parsing here
+	for i in ${channels}; do
+		queue "JOIN ${i}"
+	done
+}
+
+# exit program and cleanup
+exit_prg() {
+	pkill -P "$$"
+	rm -f "$infile" "$outfile"
 	exec 3>&-
 	exec 4>&-
 	exit
 }
 
-function queue_msg {
-	echo "$*"
-	echo -e "$*\r\n" >&3
+queue() {
+	printf "%s\r\n" "$*"
+	printf "%s\r\n" "$*" >&3
 }
 
-function join_chan {
-	queue_msg "JOIN $1"
+say() {
+	queue "PRIVMSG $1 :$2"
 }
 
-function send_msg {
-	queue_msg "PRIVMSG $1 :$2"
+getresp() {
+	shuf $ballresp | head -n1
 }
 
-function get_8ball {
-	shuf "$ballmsgs" | head -n 1
-}
-
-function parse_msg {
-	echo "1: $1"
-	echo "2: $2"
-	user=''
-	dest=''
-	sourcemsg=''
-	if [[ $2 =~ "PRIVMSG" ]]; then
-		user=`echo ${1} | sed 's/[:!]/ /g' | awk '{print $1}'`
-		if [[ $2 =~ "#" ]]; then
-			dest=`echo ${2} | awk '{print $2}'`
-		else
-			dest=${user}
-		fi
-		sourcemsg=`echo ${2} | sed 's/[^:]*://'`
-		echo "$user $dest $sourcemsg"
-	elif [ "$1" == "PING" ]; then
-		reply=`echo $2 | sed 's/://g'`
-		echo "reply: $reply"
-		queue_msg "PONG $reply"
-		return
-	fi
-	# stolen regexes
-	# credit goes to @GeneralUnRest
-	regexp="${nickname}.? (.*) or (.*)\?"
-	regexp2="${nickname}.? (.*)\?"
-	regexp3="(.*) or (.*)\?"
-	regexp4="(.*)\?"
-	invite_regexp="invite (.*)"
-	[[ $user == ${nickname} ]] && return
-	private=$([[ (! -z $user ) &&  ($user == $dest) ]] && echo "yes")
-	if [[ ($sourcemsg =~ $regexp) || ($private && $sourcemsg =~ $regexp3) ]]; then
-		send_msg "$dest" "${BASH_REMATCH[($RANDOM % 2)+1]}"
-	elif [[ $sourcemsg =~ $regexp2 || ($private && $sourcemsg =~ $regexp4) ]]; then
-		send_msg "$dest" "$(get_8ball)"
-	elif [[ $sourcemsg =~ ".source" || ($private && $sourcemsg =~ "source") ]]; then
-		send_msg "$dest" "https://github.com/kjensenxz/irc8ball"
-	elif [[ $private && ($sourcemsg =~ $invite_regexp) ]]; then
-		send_msg "$dest" "Attempting to join ${BASH_REMATCH[1]}";
-		join_chan "${BASH_REMATCH[1]}"
-	elif [[ $private ]]; then
-		send_msg "$dest" "These are the command/s supported:"
-		send_msg "$dest" "invite #channel - join channel"
-		send_msg "$dest" "8ball [y/n question] - standard 8ball response"
-		send_msg "$dest" "x or y? - choose x or y"
-		send_msg "$dest" "source - get source info"
-		send_msg "$dest" "help - this message"
+#args: channel, sender, data
+parse_pub() {
+	[ $2 == $nickname ] && return
+	orregexp="${nickname}.? (.*) or (.*)\?"
+	questexp="${nickname}.? (.*)\?"
+	if [[ $3 =~ $orregexp ]]; then
+		echo "or"
+		say "$1" "$2: ${BASH_REMATCH[($RANDOM % 2)+1]}"
+	elif [[ $3 =~ $questexp ]]; then
+		echo "reg"
+		resp=$(getresp)
+		say "$1" "$2: $resp"
+	else
+		cmd=$(sed -r 's/^:|\r$//g' <<< $3)
+		echo "'$cmd'"
+		case $cmd in
+			[.!]bots)
+				say "$1" "8ball-bot [bash], .help for usage, .source for source info"
+			;;
+			[.!]source)
+				say "$1" "https://github.com/kjensenxz/8ball-ircbot"
+			;;
+			[.!]help)
+				say "$1" "Highlight me and ask a yes or no question, or give me two prepositions seperated by an or; all queries must end wit ha question mark."
+			;;
+		esac
 	fi
 }
 
-trap 'exit_prg' SIGINT SIGHUP SIGTERM
+# args: sender, data
+parse_priv() {
+	orregexp="(.*) or (.*)\?";
+	questexp="(.*)\?";
+	if [[ $2 =~ $orregexp ]]; then
+		echo "or"
+		say "$1" "${BASH_REMATCH[($RANDOM % 2)+1]}"
+	elif [[ $2 =~ $questexp ]]; then
+		echo "reg"
+		resp=$(getresp)
+		say "$1" "$resp"
+	else
+		cmd=$(sed 's/\r$//' <<< $2)
+		echo "'$cmd'"
+		case "$cmd" in
+			:invite*)
+				inviteregexp="invite (.*)"
+				if [[ "$2" =~ $inviteregexp ]]; then
+					temp=${BASH_REMATCH[1]}
+					queue "JOIN ${temp}"
+					say "$1" "Attempting to join channel ${temp}"
+					unset temp
+				else
+					say "$1" "Give me a channel to join"
+				fi
+			;;
+			:8ball*)
+				say "$1" "$(getresp)"
+			;;
+			:source*)
+				say "$1" "https://github.com/kjensenxz/8ball-ircbot"
+			;;
+			*)
+				say "$1" "These are the command/s supported:"
+				say "$1" "invite #channel - join channel"
+				say "$1" "8ball [y/n question] - standard 8ball"
+				say "$1" "source - get source info"
+				say "$1" "help - this message"
+			;;
+		esac	
+	fi
+}
 
-commands="${network} ${port}"
-if [[ $ssl == 'yes' ]]; then 
-	commands="--ssl ${commands}"
+if [ ! -f "./config.sh" ]; then
+	error "fatal: config file not found; exiting"
+	exit
 fi
-ncat $commands <&3 >&4 &
-unset commands
 
-(sleep 3s && echo "connect" >&4) &
-join="yes"
-while read -r usr msg; do
-	echo "$usr $msg"
-	if [[ "$usr" == "connect" || "$msg" =~ "^004" ]]; then
-		for i in $channels; do
-			queue_msg "JOIN ${i}"
-		done
-		break
-	elif [[ "$msg" =~ "NOTICE" && $join == "yes" ]]; then
-		queue_msg "NICK ${nickname}"
-		queue_msg "USER ${nickname} 8 * :${nickname}"
-		join='no'
-	elif [ "$usr" == "PING" ]; then
-		echo "PING RECIEVED"
-		reply=$(echo "$msg" | sed 's/://g')
-		queue_msg "PONG :$reply"
-		echo "connect" >&4
+init_prg
+connect
+
+while read -r prefix msg; do
+	echo "${prefix} | ${msg}"
+	if [[ $prefix == "PING" ]]; then
+		queue "PONG ${msg}"
+	elif [[ $prefix == "ERROR" ]]; then
+		error "Disconnected; exiting"
+		exit
+	elif [[ $msg =~ ^PRIVMSG ]]; then
+		dest=$(awk '{print $2}' <<< $msg)
+		sender=$(sed -r 's/:|!.*//g' <<< $prefix)
+		data=$(awk '{$1=$2=""; print $0}' <<< $msg)
+
+		# check for private message
+		if [ $dest == $nickname ]; then
+			dest=$sender
+			parse_priv "$sender" "$data"
+		else 
+			parse_pub "$dest" "$sender" "$data"
+			echo "pub"
+		fi
+
 	fi
-done <&4
-unset join
 
-while read -r usr msg; do
-	parse_msg "$usr" "$msg"
 done <&4
+
+exit_prg
