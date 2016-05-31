@@ -1,5 +1,8 @@
 language: bash
 bash:
-- 4.3.42
+ - 4.3.42
 script: bash 8ball-ircbot.sh
-install: nmap
+sudo: requiree
+before_install: 
+ - sudo apt-get update -qq
+ - sudo apt-get install nmap
