@@ -1,0 +1,4 @@
+language: bash
+bash:
+- 4.3.42
+script: bash 8ball-ircbot.sh
