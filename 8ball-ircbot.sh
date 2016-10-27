@@ -37,8 +37,8 @@ init_prg() {
 
 connect() {
 	# start a timer and connect to server
-	join='yes'
-	(sleep 2s && join='no' ) &
+	trytojoin='yes'
+	(sleep 2s && trytojoin='no' ) &
 	
 	queue "NICK ${nickname}"
 	queue "USER ${nickname} 8 * :${nickname}"
@@ -47,15 +47,15 @@ connect() {
 		echo "$prefix | $msg"
 		if [[ $prefix == "PING" ]]; then
 			queue "PONG ${msg}"
-			join='no'
+			trytojoin='no'
 		elif [[ $msg =~ ^004 ]]; then
-			join='no'
+			trytojoinjoin='no'
 		elif [[ $msg =~ ^433 ]]; then
-			join='no'
+			trytojoin='no'
 			error "nickname in use; exiting"
 			exit_prg
 		fi
-		if [[ $join == 'no' ]]; then 
+		if [[ $trytojoin == 'no' ]]; then 
 			break
 		fi
 	done <&4
