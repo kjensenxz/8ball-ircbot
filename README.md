@@ -16,12 +16,12 @@ Edit the script config.sh
 Ask it a yes or no question, note the ? at the end is required:
 
 	<you>      the8ball: should I do x?
-	<the8ball> <you> Without a doubt.
+	<the8ball> you: Without a doubt.
 
 Ask it to decided between two things:
 
 	<you>      the8ball: this or that?
-	<the8ball> <you> that.
+	<the8ball> you: that.
 
 Other commands:
 
